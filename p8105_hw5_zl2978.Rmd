@@ -4,8 +4,18 @@ output: github_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+knitr::opts_chunk$set(
+ echo = TRUE,
+ fig.width = 8, 
+ fig.height = 6,
+ fig.asp = 0.618,
+ out.width = "90%")
+theme_set(theme_bw() + 
+          theme(legend.position = "bottom",
+                legend.title = element_blank(),
+                plot.title = element_text(hjust = 0.5, size = 15),
+                plot.subtitle = element_text(hjust = 0.5, size = 12)))
 ```
 
 ## Problem 1  
@@ -114,6 +124,90 @@ ggplot(aes(x = week, y = value, color = arm, group = ID)) +
   ) 
 ```
 
-As we can see from the plot, in the control arm, the variation of each person over 8 weekes is within a certain interval, and the overall trends is not increasing or decreasing. In the experimental arm, there is a general increasing trend for each individual over the eight weeks. Besides, there is not a significant difference between the initial values of the control arm and experimental arm, but the value of the experimental arm is generally higher than the control arm since week 4, and at the end of the experiment, all of the value of the experimental arm is higher than than of the control arm.
+As we can see from the plot, in the control arm, the variation of each person over 8 weekes is within a certain interval, and the overall trends is not increasing or decreasing. In the experimental arm, there is a general increasing trend for each individual over the eight weeks. Besides, there is not a significant difference between the initial values of the control arm and experimental arm, but the value of the experimental arm is generally higher than the control arm since week 4, and at the end of the experiment, all of the value of the experimental arm is higher than than of the control arm.  
 
+## Problem 3  
+
+I will first create a 5000 datasets where the mean equals to 0.
+```{r}
+set.seed(1000)
+get_value = function(x){
+ t_test = 
+   rnorm(30,x,5) %>% 
+   t.test(mu = 0) %>% 
+   broom::tidy() 
+   tibble(
+      estimate_mean = t_test[[1,1]],
+      p_value = t_test[[1,3]]
+    )
+}
+test_value_0 = rerun(5000,get_value(0))
+```
+
+Then I will repeat it for mean equals to {1,2,3,4,5,6}.
+```{r}
+test_value_mix = 
+  tibble(true_mean = 1:6) %>% 
+  mutate(output = 
+           map(.x = 1:6, ~rerun(5000, get_value(.x)))) %>% 
+  unnest() %>% 
+  unnest()
+```
+
+Then I will make a plot showing the proportion of the times when the null hypothesis was rejected.
+```{r}
+test_value_mix %>% 
+  group_by(true_mean) %>% 
+  summarize(
+    n = n(),
+    Power = sum(p_value < 0.05)/n) %>% 
+  ggplot(aes(x = true_mean, y = Power)) +
+  geom_point() +
+  geom_line() +
+  labs(title = "Association between Effect Size and Power", 
+         x = "Ture mean")
+```
+
+As we can see from the plot, when the true mean increases, the power of the test also increases. In addition, the second derivative of this relationship decreases as the effect size increases, as we can find that the power nearly equals to 1 when the true mean is greater or equal than 5. To sum up, when the larger the effect size, the easier we can reject the null hypothesis.  
+
+### estimate value and true value plot
+```{r}
+df1 = 
+  test_value_mix %>% 
+  group_by(true_mean) %>% 
+  summarize(
+    hat_mean = mean(estimate_mean)
+  ) 
+df2 = 
+  test_value_mix %>% 
+  filter(p_value < 0.05) %>% 
+  group_by(true_mean) %>% 
+  summarize(
+    hat_mean = mean(estimate_mean)
+  ) 
+  ggplot() +
+  geom_point(data = df1,aes(x = true_mean, y = hat_mean, color = "red")) +
+  geom_line(data = df1,aes(x = true_mean, y = hat_mean, color = "red")) +
+  geom_point(data = df2,aes(x = true_mean, y = hat_mean, color = "blue")) +
+  geom_line(data = df2,aes(x = true_mean, y = hat_mean, color = "blue")) +
+  scale_color_identity(breaks = c("red", "blue"),
+                       labels = c("True values", "Average estimate of sample mean"),
+                       guide = "legend")
+```
+
+```{r}
+test_value_mix = 
+  tibble(true_mean = 0) %>% 
+  mutate(output = 
+           map(.x = 0, ~rerun(5000, get_value(.x)))) %>% 
+  unnest() %>% 
+  unnest() %>% 
+  filter(p_value < 0.05)
+```
+
+The sample average of μ̂  across tests for which the null is rejected is not equal to the true value of μ when the true mean is relatively small, and the two values are almost the same when the true mean equals to 5 or 6.
+
+As we can see, as the true mean increases, the difference between the true mean and the average estimate of sample mean decreases. 
+
+First, the rejected samples contained estimate values that are significantly larger than 0 (the probability of these values that are smaller than 0 is very small). For the true mean equals to {1,2,3}, only part of the samples which contained bigger estimate values could reject the null, and thus the average estimate of the sample mean is greater than the true mean. For the true mean equals to 5 or 6, almost all of the samples could reject the null, and thus almost all the samples is in the rejected set, so the average estimate of the sample mean is approximately equals to the true mean. 
 
